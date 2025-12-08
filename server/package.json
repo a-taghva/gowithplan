@@ -1,7 +1,7 @@
 {
   "name": "quiz-server",
   "version": "1.0.0",
-  "description": "Quiz application backend",
+  "description": "Express server for quiz application",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -12,7 +12,7 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "firebase-admin": "^12.0.0",
-    "mongodb": "^6.3.0"
+    "mongoose": "^8.0.3"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

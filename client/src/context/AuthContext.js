@@ -1,76 +1,82 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { auth, googleProvider } from '../firebase';
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
+import { auth, googleProvider } from '../firebase';
+import axios from 'axios';
 
 const AuthContext = createContext();
 
-export function useAuth() {
-  return useContext(AuthContext);
-}
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
 
-export function AuthProvider({ children }) {
+export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [dbUser, setDbUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  async function signInWithGoogle() {
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      return result.user;
-    } catch (error) {
-      console.error('Sign in error:', error);
-      throw error;
-    }
-  }
-
-  async function logout() {
-    try {
-      await signOut(auth);
-      setDbUser(null);
-    } catch (error) {
-      console.error('Sign out error:', error);
-      throw error;
-    }
-  }
-
-  async function syncUserToDatabase(firebaseUser) {
-    try {
-      const response = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firebaseUid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL
-        })
-      });
-      const userData = await response.json();
-      setDbUser(userData);
-      return userData;
-    } catch (error) {
-      console.error('Error syncing user:', error);
-    }
-  }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
       if (firebaseUser) {
-        await syncUserToDatabase(firebaseUser);
+        try {
+          const token = await firebaseUser.getIdToken();
+          
+          // Login to our backend
+          const response = await axios.post('/api/auth/login', {}, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          
+          setUser({
+            ...response.data,
+            token
+          });
+        } catch (error) {
+          console.error('Auth error:', error);
+          setUser(null);
+        }
+      } else {
+        setUser(null);
       }
       setLoading(false);
     });
 
-    return unsubscribe;
+    return () => unsubscribe();
   }, []);
+
+  const loginWithGoogle = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+      throw error;
+    }
+  };
+
+  const getToken = async () => {
+    if (auth.currentUser) {
+      return await auth.currentUser.getIdToken();
+    }
+    return null;
+  };
 
   const value = {
     user,
-    dbUser,
     loading,
-    signInWithGoogle,
-    logout
+    loginWithGoogle,
+    logout,
+    getToken
   };
 
   return (
@@ -78,5 +84,5 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
-}
+};
 

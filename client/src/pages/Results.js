@@ -1,195 +1,205 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import axios from 'axios';
+import { motion } from 'framer-motion';
 import './Results.css';
 
-function Results() {
+const Results = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [saving, setSaving] = useState(true);
-  const [saved, setSaved] = useState(false);
+  const { getToken } = useAuth();
+  
+  const { results = [], questions = [], topicId, topicName, mode, favorites: initialFavorites = [] } = location.state || {};
+  const [favorites, setFavorites] = useState(new Set(initialFavorites));
 
-  const { quiz, answers, mode } = location.state || {};
-
-  useEffect(() => {
-    if (!quiz || !answers) {
-      navigate('/');
-      return;
-    }
-    saveResults();
-  }, []);
-
-  async function saveResults() {
-    try {
-      const results = answers.filter(a => a !== null).map(a => ({
-        questionId: a.questionId,
-        isCorrect: a.isCorrect
-      }));
-
-      await fetch('/api/quiz/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firebaseUid: user.uid,
-          topicId: quiz.topicId,
-          mode,
-          results
-        })
-      });
-      setSaved(true);
-    } catch (error) {
-      console.error('Error saving results:', error);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (!quiz || !answers) {
+  if (!location.state) {
+    navigate('/');
     return null;
   }
 
-  const correctCount = answers.filter(a => a?.isCorrect).length;
-  const totalCount = answers.filter(a => a !== null).length;
-  const percentage = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
+  const correctCount = results.filter(r => r.isCorrect).length;
+  const incorrectCount = results.filter(r => !r.isCorrect).length;
+  const totalAnswered = results.length;
+  const percentage = totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
 
-  const modeLabels = {
-    remaining: 'Quiz',
-    mistakes: 'Review Mistakes',
-    mastered: 'Review Mastered'
+  const toggleFavorite = async (questionId) => {
+    try {
+      const token = await getToken();
+      await axios.post('/api/quiz/favorite', {
+        topicId,
+        questionId
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setFavorites(prev => {
+        const newFavorites = new Set(prev);
+        if (newFavorites.has(questionId)) {
+          newFavorites.delete(questionId);
+        } else {
+          newFavorites.add(questionId);
+        }
+        return newFavorites;
+      });
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+    }
   };
 
-  function getScoreMessage() {
-    if (percentage === 100) return "Perfect score! Outstanding!";
-    if (percentage >= 80) return "Great job! Keep it up!";
-    if (percentage >= 60) return "Good effort! Room to improve.";
-    if (percentage >= 40) return "Keep practicing!";
-    return "Don't give up! Try again.";
-  }
+  const getScoreMessage = () => {
+    if (percentage === 100) return "Perfect! 🎉";
+    if (percentage >= 80) return "Great job! 💪";
+    if (percentage >= 60) return "Good effort! 📚";
+    if (percentage >= 40) return "Keep practicing! 🎯";
+    return "Don't give up! 💡";
+  };
 
-  function getScoreEmoji() {
-    if (percentage === 100) return "🏆";
-    if (percentage >= 80) return "🌟";
-    if (percentage >= 60) return "👍";
-    if (percentage >= 40) return "💪";
-    return "📚";
-  }
+  const getScoreColor = () => {
+    if (percentage >= 80) return 'var(--accent-green)';
+    if (percentage >= 60) return 'var(--accent-cyan)';
+    if (percentage >= 40) return 'var(--accent-amber)';
+    return 'var(--accent-red)';
+  };
 
   return (
-    <div className="results-page">
-      <div className="results-container slide-up">
-        <div className="results-header">
-          <span className="score-emoji">{getScoreEmoji()}</span>
+    <div className="results-page page">
+      <div className="container">
+        <motion.div 
+          className="results-header"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
           <h1>Quiz Complete!</h1>
-          <p className="topic-name">{quiz.topicName}</p>
-          <span className={`mode-badge ${mode}`}>{modeLabels[mode]}</span>
-        </div>
+          <p className="topic-info">{topicName} • {mode}</p>
+        </motion.div>
 
-        <div className="score-card">
-          <div className="score-circle">
+        <motion.div 
+          className="score-card"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.1 }}
+        >
+          <div className="score-circle" style={{ '--score-color': getScoreColor() }}>
             <svg viewBox="0 0 100 100">
-              <circle
-                className="score-bg"
-                cx="50"
-                cy="50"
+              <circle className="score-bg" cx="50" cy="50" r="45" />
+              <circle 
+                className="score-progress" 
+                cx="50" 
+                cy="50" 
                 r="45"
-                fill="none"
-                strokeWidth="8"
-              />
-              <circle
-                className="score-fill"
-                cx="50"
-                cy="50"
-                r="45"
-                fill="none"
-                strokeWidth="8"
-                strokeDasharray={`${percentage * 2.83} 283`}
-                style={{
-                  stroke: percentage >= 60 ? 'var(--success)' : 
-                          percentage >= 40 ? 'var(--warning)' : 'var(--error)'
+                style={{ 
+                  strokeDasharray: `${percentage * 2.83} 283`,
+                  stroke: getScoreColor()
                 }}
               />
             </svg>
-            <div className="score-text">
-              <span className="score-number">{percentage}%</span>
+            <div className="score-content">
+              <span className="score-percent">{percentage}%</span>
+              <span className="score-label">{getScoreMessage()}</span>
             </div>
           </div>
 
-          <div className="score-details">
-            <div className="score-stat">
-              <span className="stat-value correct">{correctCount}</span>
+          <div className="score-stats">
+            <div className="stat correct">
+              <span className="stat-value">{correctCount}</span>
               <span className="stat-label">Correct</span>
             </div>
-            <div className="score-divider"></div>
-            <div className="score-stat">
-              <span className="stat-value incorrect">{totalCount - correctCount}</span>
+            <div className="stat incorrect">
+              <span className="stat-value">{incorrectCount}</span>
               <span className="stat-label">Incorrect</span>
             </div>
-            <div className="score-divider"></div>
-            <div className="score-stat">
-              <span className="stat-value total">{totalCount}</span>
-              <span className="stat-label">Total</span>
+            <div className="stat total">
+              <span className="stat-value">{totalAnswered}</span>
+              <span className="stat-label">Answered</span>
             </div>
           </div>
+        </motion.div>
 
-          <p className="score-message">{getScoreMessage()}</p>
-        </div>
-
-        {saving ? (
-          <div className="saving-status">
-            <div className="loader small"></div>
-            <span>Saving your progress...</span>
-          </div>
-        ) : saved && (
-          <div className="saving-status success">
-            <span>✓ Progress saved</span>
-          </div>
-        )}
-
-        <div className="results-summary">
-          <h3>Question Summary</h3>
-          <div className="summary-list">
-            {quiz.questions.map((question, index) => {
-              const answer = answers[index];
-              const isCorrect = answer?.isCorrect;
-
-              return (
-                <div key={index} className={`summary-item ${isCorrect ? 'correct' : 'incorrect'}`}>
-                  <div className="summary-icon">
-                    {isCorrect ? '✓' : '✗'}
-                  </div>
-                  <div className="summary-content">
-                    <p className="summary-question">{question.question}</p>
-                    {!isCorrect && (
-                      <p className="summary-answer">
-                        Correct: <strong>{question.answer}</strong>
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="results-actions">
+        <motion.div 
+          className="results-actions"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
           <button 
-            className="btn btn-primary btn-lg"
-            onClick={() => navigate(`/quiz/${quiz.topicId}/${mode}`)}
+            className="action-btn primary"
+            onClick={() => navigate(`/quiz/${topicId}/${mode}`)}
           >
-            Try Again
+            Try Again ({mode})
           </button>
           <button 
-            className="btn btn-secondary btn-lg"
+            className="action-btn secondary"
             onClick={() => navigate('/')}
           >
-            Back to Topics
+            Back to {topicName}
           </button>
-        </div>
+          <button 
+            className="action-btn secondary"
+            onClick={() => navigate('/')}
+          >
+            All Topics
+          </button>
+        </motion.div>
+
+        {results.length > 0 && (
+          <motion.div 
+            className="results-breakdown"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            <h2>Question Breakdown</h2>
+            
+            <div className="breakdown-list">
+              {results.map((result, index) => {
+                const question = questions.find(q => q.questionId === result.questionId);
+                if (!question) return null;
+                
+                return (
+                  <motion.div 
+                    key={result.questionId}
+                    className={`breakdown-item ${result.isCorrect ? 'correct' : 'incorrect'}`}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.3 + index * 0.05 }}
+                  >
+                    <div className="breakdown-header">
+                      <span className={`status-badge ${result.isCorrect ? 'correct' : 'incorrect'}`}>
+                        {result.isCorrect ? '✓' : '✗'}
+                      </span>
+                      <span className="question-num">Q{index + 1}</span>
+                      <button 
+                        className={`favorite-toggle ${favorites.has(result.questionId) ? 'is-favorite' : ''}`}
+                        onClick={() => toggleFavorite(result.questionId)}
+                      >
+                        {favorites.has(result.questionId) ? '★' : '☆'}
+                      </button>
+                    </div>
+                    
+                    <p className="breakdown-question">{question.question}</p>
+                    
+                    <div className="breakdown-answer">
+                      <span className="answer-label">Answer:</span>
+                      <span className="answer-value">{question.answer}</span>
+                    </div>
+                    
+                    {question.explanation && (
+                      <div className="breakdown-explanation">
+                        <span className="explanation-label">Explanation:</span>
+                        <p>{question.explanation}</p>
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
       </div>
     </div>
   );
-}
+};
 
 export default Results;
 

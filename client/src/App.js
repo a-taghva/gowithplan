@@ -5,55 +5,85 @@ import Login from './pages/Login';
 import Topics from './pages/Topics';
 import Quiz from './pages/Quiz';
 import Results from './pages/Results';
+import Favorites from './pages/Favorites';
+import Settings from './pages/Settings';
+import Navbar from './components/Navbar';
 import './App.css';
 
-function ProtectedRoute({ children }) {
+const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
     return (
       <div className="loading-screen">
-        <div className="loader"></div>
+        <div className="loading-spinner"></div>
         <p>Loading...</p>
       </div>
     );
   }
 
-  if (!user) {
-    return <Navigate to="/login" />;
-  }
-
-  return children;
-}
+  return user ? children : <Navigate to="/login" />;
+};
 
 function App() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <div className="loading-spinner"></div>
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
+      {user && <Navbar />}
       <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/"
+        <Route 
+          path="/login" 
+          element={user ? <Navigate to="/" /> : <Login />} 
+        />
+        <Route 
+          path="/" 
           element={
-            <ProtectedRoute>
+            <PrivateRoute>
               <Topics />
-            </ProtectedRoute>
-          }
+            </PrivateRoute>
+          } 
         />
-        <Route
-          path="/quiz/:topicId/:mode"
+        <Route 
+          path="/quiz/:topicId/:mode" 
           element={
-            <ProtectedRoute>
+            <PrivateRoute>
               <Quiz />
-            </ProtectedRoute>
-          }
+            </PrivateRoute>
+          } 
         />
-        <Route
-          path="/results"
+        <Route 
+          path="/results" 
           element={
-            <ProtectedRoute>
+            <PrivateRoute>
               <Results />
-            </ProtectedRoute>
-          }
+            </PrivateRoute>
+          } 
+        />
+        <Route 
+          path="/favorites/:topicId" 
+          element={
+            <PrivateRoute>
+              <Favorites />
+            </PrivateRoute>
+          } 
+        />
+        <Route 
+          path="/settings" 
+          element={
+            <PrivateRoute>
+              <Settings />
+            </PrivateRoute>
+          } 
         />
       </Routes>
     </div>

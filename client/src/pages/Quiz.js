@@ -1,131 +1,164 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import axios from 'axios';
+import { motion, AnimatePresence } from 'framer-motion';
 import './Quiz.css';
 
-function Quiz() {
+const Quiz = () => {
   const { topicId, mode } = useParams();
-  const { user } = useAuth();
   const navigate = useNavigate();
+  const { getToken } = useAuth();
 
-  const [quiz, setQuiz] = useState(null);
+  const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState([]);
-  const [selectedOption, setSelectedOption] = useState(null);
-  const [showResult, setShowResult] = useState(false);
-  const [revealedAnswer, setRevealedAnswer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [isAnswered, setIsAnswered] = useState(false);
+  const [isRevealed, setIsRevealed] = useState(false);
+  const [results, setResults] = useState([]);
+  const [favorites, setFavorites] = useState(new Set());
+  const [topicName, setTopicName] = useState('');
 
   useEffect(() => {
-    generateQuiz();
+    fetchQuestions();
   }, [topicId, mode]);
 
-  async function generateQuiz() {
+  const fetchQuestions = async () => {
     try {
-      const response = await fetch('/api/quiz/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topicId,
-          mode,
-          firebaseUid: user.uid
-        })
+      const token = await getToken();
+      const response = await axios.get(`/api/quiz/${topicId}/${mode}`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-      const data = await response.json();
       
-      if (data.questions.length === 0) {
-        setError('No questions available for this mode.');
+      if (response.data.length === 0) {
+        setError(`No ${mode} questions available`);
       } else {
-        setQuiz(data);
-        setAnswers(new Array(data.questions.length).fill(null));
+        setQuestions(response.data);
+        setTopicName(response.data[0]?.topic || '');
       }
     } catch (err) {
-      setError('Failed to load quiz. Please try again.');
+      setError('Failed to load questions');
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  const currentQuestion = quiz?.questions[currentIndex];
-  const hasOptions = currentQuestion?.options && currentQuestion.options.length > 0;
+  const currentQuestion = questions[currentIndex];
 
-  function handleOptionSelect(option) {
-    if (showResult) return;
-    setSelectedOption(option);
-  }
-
-  function handleRevealAnswer() {
-    setRevealedAnswer(true);
-  }
-
-  function handleSelfAssessment(isCorrect) {
-    const newAnswers = [...answers];
-    newAnswers[currentIndex] = {
-      questionId: currentQuestion.id,
-      selectedAnswer: isCorrect ? currentQuestion.answer : 'incorrect',
+  const handleSelectAnswer = (option) => {
+    if (isAnswered) return;
+    setSelectedAnswer(option);
+    
+    // Immediately confirm the answer
+    const isCorrect = option === currentQuestion.answer;
+    setIsAnswered(true);
+    
+    setResults(prev => [...prev, {
+      questionId: currentQuestion.questionId,
       isCorrect
-    };
-    setAnswers(newAnswers);
-    setShowResult(true);
-  }
+    }]);
+  };
 
-  function submitAnswer() {
-    if (!selectedOption) return;
+  const handleRevealAnswer = () => {
+    setIsRevealed(true);
+  };
 
-    const isCorrect = selectedOption === currentQuestion.answer;
-    const newAnswers = [...answers];
-    newAnswers[currentIndex] = {
-      questionId: currentQuestion.id,
-      selectedAnswer: selectedOption,
-      isCorrect
-    };
-    setAnswers(newAnswers);
-    setShowResult(true);
-  }
+  const handleSelfAssessment = (wasCorrect) => {
+    setIsAnswered(true);
+    
+    setResults(prev => [...prev, {
+      questionId: currentQuestion.questionId,
+      isCorrect: wasCorrect
+    }]);
+  };
 
-  function nextQuestion() {
-    if (currentIndex < quiz.questions.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-      setSelectedOption(null);
-      setShowResult(false);
-      setRevealedAnswer(false);
+  const handleNext = () => {
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+      setSelectedAnswer(null);
+      setIsAnswered(false);
+      setIsRevealed(false);
     } else {
-      // Quiz complete - navigate to results
-      navigate('/results', {
-        state: {
-          quiz,
-          answers,
-          mode
-        }
-      });
+      finishQuiz();
     }
-  }
+  };
 
-  function exitQuiz() {
-    if (window.confirm('Are you sure you want to exit? Your progress will be lost.')) {
-      navigate('/');
+  const toggleFavorite = async () => {
+    try {
+      const token = await getToken();
+      await axios.post('/api/quiz/favorite', {
+        topicId,
+        questionId: currentQuestion.questionId
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setFavorites(prev => {
+        const newFavorites = new Set(prev);
+        if (newFavorites.has(currentQuestion.questionId)) {
+          newFavorites.delete(currentQuestion.questionId);
+        } else {
+          newFavorites.add(currentQuestion.questionId);
+        }
+        return newFavorites;
+      });
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
     }
-  }
+  };
+
+  const finishQuiz = useCallback(async () => {
+    try {
+      const token = await getToken();
+      await axios.post('/api/quiz/submit', {
+        topicId,
+        mode,
+        results
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch (err) {
+      console.error('Failed to submit results:', err);
+    }
+
+    navigate('/results', { 
+      state: { 
+        results, 
+        questions, 
+        topicId, 
+        topicName,
+        mode,
+        favorites: Array.from(favorites)
+      } 
+    });
+  }, [results, questions, topicId, topicName, mode, favorites, navigate, getToken]);
+
+  const handleExit = () => {
+    // Exit instantly and go to results page
+    finishQuiz();
+  };
 
   if (loading) {
     return (
-      <div className="loading-screen">
-        <div className="loader"></div>
-        <p>Loading quiz...</p>
+      <div className="quiz-page page">
+        <div className="quiz-loading">
+          <div className="loading-spinner"></div>
+          <p>Loading questions...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="quiz-page">
-        <div className="quiz-error slide-up">
-          <div className="error-icon">⚠️</div>
-          <h2>Oops!</h2>
+      <div className="quiz-page page">
+        <div className="quiz-error">
           <p>{error}</p>
-          <button className="btn btn-primary" onClick={() => navigate('/')}>
+          <button onClick={() => navigate('/')} className="back-btn">
             Back to Topics
           </button>
         </div>
@@ -133,141 +166,136 @@ function Quiz() {
     );
   }
 
-  const modeLabels = {
-    remaining: 'Quiz',
-    mistakes: 'Review Mistakes',
-    mastered: 'Review Mastered'
-  };
+  const hasOptions = currentQuestion?.options && currentQuestion.options.length > 0;
 
   return (
-    <div className="quiz-page">
-      <header className="quiz-header">
-        <button className="btn btn-ghost" onClick={exitQuiz}>
-          ← Exit
-        </button>
-        <div className="quiz-info">
-          <span className="topic-name">{quiz?.topicName}</span>
-          <span className={`mode-badge ${mode}`}>{modeLabels[mode]}</span>
+    <div className="quiz-page page">
+      <div className="quiz-container">
+        <div className="quiz-header">
+          <div className="quiz-info">
+            <span className="quiz-topic">{topicName}</span>
+            <span className="quiz-mode">{mode}</span>
+          </div>
+          
+          <div className="quiz-progress">
+            <span className="progress-text">
+              {currentIndex + 1} / {questions.length}
+            </span>
+            <div className="progress-bar-mini">
+              <div 
+                className="progress-fill"
+                style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
+              ></div>
+            </div>
+          </div>
+
+          <button className="exit-btn" onClick={handleExit}>
+            Exit Quiz
+          </button>
         </div>
-        <div className="progress-indicator">
-          {currentIndex + 1} / {quiz?.questions.length}
-        </div>
-      </header>
 
-      <div className="quiz-progress-bar">
-        <div 
-          className="quiz-progress-fill" 
-          style={{ width: `${((currentIndex + 1) / quiz?.questions.length) * 100}%` }}
-        />
-      </div>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentIndex}
+            className="question-card"
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -50 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="question-header">
+              <span className="question-number">Question {currentIndex + 1}</span>
+              <button 
+                className={`favorite-btn ${favorites.has(currentQuestion?.questionId) ? 'is-favorite' : ''}`}
+                onClick={toggleFavorite}
+              >
+                {favorites.has(currentQuestion?.questionId) ? '★' : '☆'}
+              </button>
+            </div>
 
-      <main className="quiz-content">
-        <div className="question-card slide-up" key={currentIndex}>
-          <div className="question-number">Question {currentIndex + 1}</div>
-          <h2 className="question-text">{currentQuestion?.question}</h2>
+            <h2 className="question-text">{currentQuestion?.question}</h2>
 
-          {hasOptions ? (
-            // Multiple Choice Question
-            <div className="options-list">
-              {currentQuestion.options.map((option, index) => {
-                let optionClass = 'option';
-                if (showResult) {
-                  if (option === currentQuestion.answer) {
-                    optionClass += ' correct';
-                  } else if (option === selectedOption && !answers[currentIndex]?.isCorrect) {
-                    optionClass += ' incorrect';
-                  }
-                } else if (option === selectedOption) {
-                  optionClass += ' selected';
-                }
-
-                return (
+            {hasOptions ? (
+              <div className="options-list">
+                {currentQuestion.options.map((option, index) => (
                   <button
                     key={index}
-                    className={optionClass}
-                    onClick={() => handleOptionSelect(option)}
-                    disabled={showResult}
+                    className={`option-btn ${selectedAnswer === option ? 'selected' : ''} ${
+                      isAnswered 
+                        ? option === currentQuestion.answer 
+                          ? 'correct' 
+                          : selectedAnswer === option 
+                            ? 'incorrect' 
+                            : ''
+                        : ''
+                    }`}
+                    onClick={() => handleSelectAnswer(option)}
+                    disabled={isAnswered}
                   >
                     <span className="option-letter">{String.fromCharCode(65 + index)}</span>
                     <span className="option-text">{option}</span>
-                    {showResult && option === currentQuestion.answer && (
-                      <span className="option-icon">✓</span>
-                    )}
-                    {showResult && option === selectedOption && option !== currentQuestion.answer && (
-                      <span className="option-icon">✗</span>
-                    )}
                   </button>
-                );
-              })}
-            </div>
-          ) : (
-            // Self-Assessment Question (no options)
-            <div className="self-assess-container">
-              {!revealedAnswer ? (
-                <button 
-                  className="btn btn-primary btn-lg reveal-btn"
-                  onClick={handleRevealAnswer}
-                >
-                  Reveal Answer
-                </button>
-              ) : (
-                <div className="answer-revealed fade-in">
+                ))}
+              </div>
+            ) : (
+              <div className="no-options">
+                {!isRevealed ? (
+                  <button className="reveal-btn" onClick={handleRevealAnswer}>
+                    Reveal Answer
+                  </button>
+                ) : (
                   <div className="revealed-answer">
                     <span className="answer-label">Answer:</span>
-                    <span className="answer-text">{currentQuestion.answer}</span>
-                  </div>
-                  
-                  {!showResult && (
-                    <div className="self-assess-buttons">
-                      <p>Did you get it right?</p>
-                      <div className="assess-btn-group">
-                        <button 
-                          className="btn btn-success"
-                          onClick={() => handleSelfAssessment(true)}
-                        >
-                          ✓ I got it right
-                        </button>
-                        <button 
-                          className="btn btn-error"
-                          onClick={() => handleSelfAssessment(false)}
-                        >
-                          ✗ I got it wrong
-                        </button>
+                    <p className="answer-text">{currentQuestion?.answer}</p>
+                    
+                    {!isAnswered && (
+                      <div className="self-assessment">
+                        <p>Did you get it right?</p>
+                        <div className="assessment-btns">
+                          <button 
+                            className="assessment-btn correct"
+                            onClick={() => handleSelfAssessment(true)}
+                          >
+                            Yes, I got it right
+                          </button>
+                          <button 
+                            className="assessment-btn incorrect"
+                            onClick={() => handleSelfAssessment(false)}
+                          >
+                            No, I got it wrong
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {showResult && currentQuestion.explanation && (
-            <div className="explanation fade-in">
-              <span className="explanation-label">Explanation:</span>
-              <p>{currentQuestion.explanation}</p>
-            </div>
-          )}
-        </div>
+            {isAnswered && currentQuestion?.explanation && (
+              <motion.div 
+                className="explanation"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <span className="explanation-label">Explanation:</span>
+                <p>{currentQuestion.explanation}</p>
+              </motion.div>
+            )}
+          </motion.div>
+        </AnimatePresence>
 
-        <div className="quiz-actions">
-          {hasOptions && !showResult ? (
-            <button
-              className="btn btn-primary btn-lg"
-              onClick={submitAnswer}
-              disabled={!selectedOption}
-            >
-              Submit Answer
+        {isAnswered && (
+          <div className="quiz-actions">
+            <button className="next-btn" onClick={handleNext}>
+              {currentIndex < questions.length - 1 ? 'Next Question' : 'See Results'}
             </button>
-          ) : showResult ? (
-            <button className="btn btn-primary btn-lg" onClick={nextQuestion}>
-              {currentIndex < quiz.questions.length - 1 ? 'Next Question' : 'See Results'}
-            </button>
-          ) : null}
-        </div>
-      </main>
+          </div>
+        )}
+      </div>
     </div>
   );
-}
+};
 
 export default Quiz;
 

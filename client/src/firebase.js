@@ -2,13 +2,13 @@ import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAB32flpqaT6cmlaVwPh3JXLgyRNuhh8ZQ",
-  authDomain: "quiz0app.firebaseapp.com",
-  projectId: "quiz0app",
-  storageBucket: "quiz0app.firebasestorage.app",
-  messagingSenderId: "622012264890",
-  appId: "1:622012264890:web:9bf24843ee0e53a3d02d83",
-  measurementId: "G-SJ1QHR8YVR"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
 const app = initializeApp(firebaseConfig);
