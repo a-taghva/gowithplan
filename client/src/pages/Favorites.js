@@ -170,24 +170,6 @@ const Favorites = () => {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                   >
-                    {question.options && question.options.length > 0 && (
-                      <div className="favorite-options">
-                        <span className="section-label">Options:</span>
-                        <ul>
-                          {question.options.map((option, i) => (
-                            <li 
-                              key={i}
-                              className={option === question.answer ? 'correct' : ''}
-                            >
-                              <span className="option-letter">{String.fromCharCode(65 + i)}</span>
-                              {option}
-                              {option === question.answer && <span className="correct-badge">✓</span>}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
                     <div className="favorite-answer">
                       <span className="section-label">Answer:</span>
                       <p>{question.answer}</p>

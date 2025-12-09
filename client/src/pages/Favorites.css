@@ -192,57 +192,6 @@
   margin-bottom: 8px;
 }
 
-.favorite-options {
-  margin-bottom: 20px;
-}
-
-.favorite-options ul {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.favorite-options li {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-}
-
-.favorite-options li.correct {
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.2);
-}
-
-.option-letter {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-secondary);
-  border-radius: 50%;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.favorite-options li.correct .option-letter {
-  background: var(--accent-green);
-  color: white;
-}
-
-.correct-badge {
-  margin-left: auto;
-  color: var(--accent-green);
-  font-weight: 600;
-}
-
 .favorite-answer {
   margin-bottom: 16px;
 }
