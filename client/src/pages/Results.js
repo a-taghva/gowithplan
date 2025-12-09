@@ -132,12 +132,6 @@ const Results = () => {
             className="action-btn secondary"
             onClick={() => navigate('/')}
           >
-            Back to {topicName}
-          </button>
-          <button 
-            className="action-btn secondary"
-            onClick={() => navigate('/')}
-          >
             All Topics
           </button>
         </motion.div>
